@@ -1,122 +1,201 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
-import './App.css'
+import React, { useState } from 'react';
 
-function App() {
-  const [count, setCount] = useState(0)
+export default function App() {
+  const [transcript, setTranscript] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [analysis, setAnalysis] = useState(null);
+  const [error, setError] = useState('');
+
+  const handleRunAnalysis = async () => {
+    if (!transcript.trim()) {
+      setError('Please paste a supervisor transcript first.');
+      return;
+    }
+
+    setLoading(true);
+    setError('');
+    setAnalysis(null);
+
+    try {
+      const response = await fetch('http://localhost:5000/api/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ transcript }),
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to parse analysis from server.');
+      }
+
+      const data = await response.json();
+      setAnalysis(data);
+    } catch (err) {
+      setError(err.message || 'An unexpected error occurred.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Inline updater function to let interns edit drafts (Fixes Automation Bias Challenge)
+  const updateField = (section, index, key, value) => {
+    setAnalysis((prev) => {
+      const updated = { ...prev };
+      if (index !== null && key !== null) {
+        updated[section][index][key] = value;
+      } else if (index !== null) {
+        updated[section][index] = value;
+      } else if (key !== null) {
+        updated[section][key] = value;
+      }
+      return updated;
+    });
+  };
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="min-h-screen bg-slate-900 text-slate-100 font-sans">
+      {/* Top Navigation Bar */}
+      <header className="border-b border-slate-800 bg-slate-950 p-4 sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto flex justify-between items-center">
+          <h1 className="text-xl font-bold tracking-wider text-teal-400">TRINETHRA // <span className="text-slate-400 font-normal text-sm">Supervisor Feedback Workspace</span></h1>
+          <div className="text-xs bg-slate-800 text-slate-300 px-3 py-1 rounded-full border border-slate-700">Ollama Context: llama3.2</div>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+      </header>
 
-      <div className="ticks"></div>
+      {/* Main Dashboard Grid Split Workspace */}
+      <main className="max-w-7xl mx-auto p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+        
+        {/* Left Side: Paste Transcript Inputs (Column Span: 5) */}
+        <section className="lg:col-span-5 space-y-4">
+          <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-xl">
+            <h2 className="text-lg font-medium text-slate-200 mb-3">Supervisor Transcript Input</h2>
+            <textarea
+              className="w-full h-96 bg-slate-900 border border-slate-700 rounded-lg p-3 text-sm text-slate-300 focus:outline-none focus:border-teal-500 font-mono leading-relaxed"
+              placeholder="Paste the raw 10-15 minute conversation transcript here..."
+              value={transcript}
+              onChange={(e) => setTranscript(e.target.value)}
+            />
+            {error && <p className="text-red-400 text-xs mt-2 font-medium">⚠️ {error}</p>}
+            <button
+              onClick={handleRunAnalysis}
+              disabled={loading}
+              className={`w-full mt-4 py-3 rounded-lg font-semibold transition-all duration-200 shadow-md ${
+                loading 
+                ? 'bg-slate-800 text-slate-500 cursor-not-allowed' 
+                : 'bg-teal-500 hover:bg-teal-400 text-slate-950 active:scale-\[0.98\]'
+              }`}
+            >
+              {loading ? 'Analyzing with Local Copilot (Ollama)...' : 'Run AI Draft Analysis'}
+            </button>
+          </div>
+        </section>
 
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
-        </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
-        </div>
-      </section>
+        {/* Right Side: Interactive Copilot Analysis Viewer (Column Span: 7) */}
+        <section className="lg:col-span-7">
+          {loading && (
+            <div className="h-full min-h-[400px] flex flex-col justify-center items-center bg-slate-950 rounded-xl border border-dashed border-slate-800 p-8 text-center">
+              <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-teal-400 mb-4"></div>
+              <p className="text-sm text-slate-400">Processing organizational context metrics, extracting supervisor quotes, mapping KPIs, and evaluating behavioral matrices...</p>
+            </div>
+          )}
 
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
-  )
+          {!loading && !analysis && (
+            <div className="h-full min-h-[400px] flex flex-col justify-center items-center bg-slate-950 rounded-xl border border-dashed border-slate-800 p-8 text-center text-slate-500">
+              <p className="text-sm">No analysis loaded. Paste a conversation transcript on the left pane and launch the processor engine.</p>
+            </div>
+          )}
+
+          {!loading && analysis && (
+            <div className="space-y-6">
+              {/* Informative Guardrail Banner */}
+              <div className="bg-amber-950/40 border border-amber-800/60 p-3 rounded-lg text-xs text-amber-300 flex items-start gap-2">
+                <span>⚠️</span>
+                <p><strong>Trinethra Copilot Mode:</strong> This dashboard renders a draft output generated by an AI agent. Modify values, confirm justifications, and verify findings directly inside fields before submitting to finalized systems.</p>
+              </div>
+
+              {/* Rubric Score Box */}
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-lg space-y-4">
+                <div className="flex justify-between items-center border-b border-slate-800 pb-3">
+                  <h3 className="font-semibold text-slate-200">Rubric Mapping Evaluation</h3>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-slate-400">Suggested Score:</span>
+                    <input 
+                      type="number" 
+                      min="1" max="10"
+                      className="w-14 bg-slate-900 border border-slate-700 rounded p-1 text-center font-bold text-teal-400"
+                      value={analysis.rubricEvaluation?.suggestedScore || ''}
+                      onChange={(e) => updateField('rubricEvaluation', null, 'suggestedScore', parseInt(e.target.value))}
+                    />
+                  </div>
+                </div>
+                <div>
+                  <label className="text-xs text-slate-400 block mb-1">Score Justification Paragraph:</label>
+                  <textarea 
+                    className="w-full bg-slate-900 border border-slate-800 rounded p-2 text-sm text-slate-300 h-24 focus:border-teal-500"
+                    value={analysis.rubricEvaluation?.justification || ''}
+                    onChange={(e) => updateField('rubricEvaluation', null, 'justification', e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {/* Extracted Evidence Array */}
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-lg space-y-3">
+                <h3 className="font-semibold text-slate-200 border-b border-slate-800 pb-3">Extracted Behavioral Evidence Quotes</h3>
+                {analysis.extractedEvidence?.map((item, idx) => (
+                  <div key={idx} className="bg-slate-900 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <textarea 
+                      className="w-full bg-transparent font-mono text-xs text-teal-300 focus:outline-none resize-none"
+                      value={item.quote}
+                      onChange={(e) => updateField('extractedEvidence', idx, 'quote', e.target.value)}
+                    />
+                    <div className="flex justify-between items-center text-[11px]">
+                      <span className={`px-2 py-0.5 rounded font-medium ${
+                        item.sentiment === 'Positive' ? 'bg-emerald-950 text-emerald-400 border border-emerald-800' :
+                        item.sentiment === 'Negative' ? 'bg-rose-950 text-rose-400 border border-rose-800' : 'bg-slate-800 text-slate-400'
+                      }`}>{item.sentiment}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* KPIs & Gaps Layout Flex */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-lg">
+                  <h3 className="font-semibold text-slate-200 border-b border-slate-800 pb-2 mb-3">Linked Manufacturing KPIs</h3>
+                  <div className="space-y-2">
+                    {analysis.kpiMapping?.map((kpi, idx) => (
+                      <input key={idx} type="text" className="w-full bg-slate-900 border border-slate-800 text-xs p-2 rounded text-slate-300" value={kpi} onChange={(e) => updateField('kpiMapping', idx, null, e.target.value)} />
+                    ))}
+                  </div>
+                </div>
+                <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-lg">
+                  <h3 className="font-semibold text-slate-200 border-b border-slate-800 pb-2 mb-3">Gap Detection (Absence Analysis)</h3>
+                  <div className="space-y-2">
+                    {analysis.gapAnalysis?.map((gap, idx) => (
+                      <input key={idx} type="text" className="w-full bg-slate-900 border border-slate-800 text-xs p-2 rounded text-slate-300" value={gap} onChange={(e) => updateField('gapAnalysis', idx, null, e.target.value)} />
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              {/* Suggested Follow-Up Questions */}
+              <div className="bg-slate-950 p-5 rounded-xl border border-slate-800 shadow-lg space-y-3">
+                <h3 className="font-semibold text-slate-200 border-b border-slate-800 pb-3">Targeted Next-Call Follow-up Questions</h3>
+                {analysis.suggestedFollowUp?.map((question, idx) => (
+                  <input 
+                    key={idx}
+                    type="text"
+                    className="w-full bg-slate-900 border border-slate-800 text-sm p-2 rounded text-teal-100"
+                    value={question}
+                    onChange={(e) => updateField('suggestedFollowUp', idx, null, e.target.value)}
+                  />
+                ))}
+              </div>
+
+            </div>
+          )}
+        </section>
+
+      </main>
+    </div>
+  );
 }
-
-export default App
