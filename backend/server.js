@@ -4,11 +4,11 @@ import cors from 'cors';
 const app = express();
 const PORT = 5000;
 
-// Enable CORS so our React frontend (running on a different port) can talk to this backend
+// Enable CORS so our React frontend can talk to this backend
 app.use(cors());
 app.use(express.json());
 
-// Test route to ensure the backend is working
+// Test route to ensure the backend is running
 app.get('/api/health', (req, res) => {
   res.json({ status: 'Backend server is running smoothly!' });
 });
@@ -21,30 +21,27 @@ app.post('/api/analyze', async (req, res) => {
     return res.status(400).json({ error: 'No transcript provided.' });
   }
 
-  // System instructions + rubric mapping context for Ollama
-  const systemPrompt = `
-You are Trinethra AI, an expert organizational psychology assistant for DeepThought. 
-Analyze the supervisor transcript provided below. 
+  // A highly directive prompt forcing ONLY raw valid JSON structure
+  const systemPrompt = `You are a strict data extraction API. Analyze the supervisor feedback transcript provided below.
+You MUST return your response as a single, valid JSON object matching the schema perfectly.
+Do not include any conversational filler, introductory comments, or markdown formatting tags. Just output the raw JSON string.
 
-You MUST return your response as a single, valid JSON object wrapped inside a \`\`\`json \`\`\` code block. Do not include any conversational text outside the code block.
-
-Expected JSON Structure:
+Schema:
 {
   "extractedEvidence": [
-    { "quote": "verbatim text from transcript", "sentiment": "Positive/Negative/Neutral" }
+    { "quote": "verbatim text from transcript", "sentiment": "Positive" }
   ],
   "rubricEvaluation": {
     "suggestedScore": 7,
     "justification": "One paragraph objective justification summarizing performance based on quotes."
   },
-  "kpiMapping": ["List any of the relevant 8 manufacturing KPIs mentioned"],
-  "gapAnalysis": ["List what was NOT covered or discussed in the transcript regarding operations"],
-  "suggestedFollowUp": ["3 to 5 highly targeted questions for the next supervisor call to fill the gaps"]
+  "kpiMapping": ["KPI Name 1", "KPI Name 2"],
+  "gapAnalysis": ["Missing operational item 1", "Missing operational item 2"],
+  "suggestedFollowUp": ["Question 1", "Question 2", "Question 3"]
 }
 
 Transcript:
-"${transcript}"
-`;
+"${transcript.replace(/"/g, '\\"')}"`;
 
   try {
     // Calling local Ollama instance running on port 11434
@@ -58,23 +55,35 @@ Transcript:
       })
     });
 
+    if (!ollamaResponse.ok) {
+      throw new Error(`Ollama service returned status code: ${ollamaResponse.status}`);
+    }
+
     const data = await ollamaResponse.json();
-    const rawText = data.response;
+    const rawText = data.response.trim();
 
-    // A robust regex utility to safely isolate and extract the JSON object out of the LLM response
-    const jsonRegex = /```json\s([\s\S]*?)\s```/;
-    const match = rawText.match(jsonRegex);
-    const cleanJsonString = match ? match[1] : rawText;
+    console.log("--- RAW LLM OUTPUT RECEIVED ---");
+    console.log(rawText);
+    console.log("-------------------------------");
 
-    const parsedAnalysis = JSON.parse(cleanJsonString.trim());
+    // Robust Regex Filter (Challenge 2): Grabs anything between the very first '{' and the very last '}'
+    // This ignores markdown code blocks (```json), leading filler words, and trailing text.
+    const jsonMatch = rawText.match(/(\{[\s\S]*\})/);
+    
+    if (!jsonMatch) {
+      throw new Error("Could not extract a valid JSON block from the model's response.");
+    }
+
+    // Parse the cleaned JSON matching the target index match
+    const parsedAnalysis = JSON.parse(jsonMatch[1].trim());
     
     // Return the clean structural data back to the frontend
     res.json(parsedAnalysis);
 
   } catch (error) {
-    console.error("Backend processing error:", error);
+    console.error("❌ Backend processing error:", error);
     res.status(500).json({ 
-      error: 'Failed to process transcript analysis.', 
+      error: 'Failed to parse analysis from server.', 
       details: error.message 
     });
   }
