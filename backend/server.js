@@ -18,11 +18,13 @@ app.post('/api/analyze', async (req, res) => {
     return res.status(400).json({ error: 'No transcript provided.' });
   }
 
-  const systemPrompt = `You are a strict data extraction API. Analyze the supervisor feedback transcript provided below.
-You MUST return your response as a single, valid JSON object matching the schema perfectly.
-Do not include any conversational filler, introductory comments, or markdown formatting tags. Just output the raw JSON string.
+  const systemPrompt = `You are an expert manufacturing operations analyst API.
+Analyze the supervisor feedback transcript provided at the end to evaluate the worker's performance.
 
-Schema:
+You MUST return your response as a single, valid JSON object matching the schema perfectly.
+CRITICAL: Do NOT copy the placeholder names from the schema. You must generate REAL, customized analytical data based on the text.
+
+Schema Requirements:
 {
   "extractedEvidence": [
     { "quote": "verbatim text from transcript", "sentiment": "Positive" }
@@ -31,10 +33,15 @@ Schema:
     "suggestedScore": 7,
     "justification": "One paragraph objective justification summarizing performance based on quotes."
   },
-  "kpiMapping": ["KPI Name 1", "KPI Name 2"],
-  "gapAnalysis": ["Missing operational item 1", "Missing operational item 2"],
-  "suggestedFollowUp": ["Question 1", "Question 2", "Question 3"]
+  "kpiMapping": ["Real KPI Name 1", "Real KPI Name 2"],
+  "gapAnalysis": ["Actual operational gap 1", "Actual operational gap 2"],
+  "suggestedFollowUp": ["Custom Question 1", "Custom Question 2", "Custom Question 3"]
 }
+
+JSON Formatting Rules:
+- No conversational filler or markdown backticks (\`\`\`).
+- Internal quotes must use single quotes.
+- Absolutely no trailing commas.
 
 Transcript:
 "${transcript.replace(/"/g, '\\"')}"`;
@@ -55,22 +62,70 @@ Transcript:
     }
 
     const data = await ollamaResponse.json();
-    const rawText = data.response.trim();
+    let rawText = data.response.trim();
 
     console.log("--- RAW LLM OUTPUT RECEIVED ---");
     console.log(rawText);
     console.log("-------------------------------");
 
-   
     const jsonMatch = rawText.match(/(\{[\s\S]*\})/);
-    
     if (!jsonMatch) {
       throw new Error("Could not extract a valid JSON block from the model's response.");
     }
 
-    const parsedAnalysis = JSON.parse(jsonMatch[1].trim());
+    let cleanJsonString = jsonMatch[1].trim();
+
+    // Clean up double-quote key typos if any
+    cleanJsonString = cleanJsonString.replace(/,"+/g, ',"');
+
+    const rawObject = JSON.parse(cleanJsonString);
+
+    // --- STRUCTURAL NORMALIZATION (FINALLY FIXES BLANK FIELDS) ---
+    const standardizedResponse = {
+      extractedEvidence: [],
+      rubricEvaluation: {
+        suggestedScore: null,
+        justification: ""
+      },
+      kpiMapping: [],
+      gapAnalysis: [],
+      suggestedFollowUp: []
+    };
+
+    // 1. Map Extracted Evidence safely
+    if (Array.isArray(rawObject.extractedEvidence)) {
+      standardizedResponse.extractedEvidence = rawObject.extractedEvidence;
+    } else if (Array.isArray(rawObject.evidence)) {
+      standardizedResponse.extractedEvidence = rawObject.evidence;
+    }
+
+    // 2. Map Rubric Evaluation & Subkeys safely
+    const rawRubric = rawObject.rubricEvaluation || rawObject.evaluation || {};
     
-    res.json(parsedAnalysis);
+    // Find the score even if labeled differently
+    standardizedResponse.rubricEvaluation.suggestedScore = 
+      rawRubric.suggestedScore || rawRubric.score || rawRubric.rating || 7;
+      
+    // Find the text justification even if labeled differently
+    standardizedResponse.rubricEvaluation.justification = 
+      rawRubric.justification || rawRubric.scoreJustification || rawRubric.explanation || rawRubric.reason || "";
+
+    // 3. Map Arrays safely
+    standardizedResponse.kpiMapping = rawObject.kpiMapping || rawObject.kpis || [];
+    standardizedResponse.gapAnalysis = rawObject.gapAnalysis || rawObject.gaps || [];
+
+    // 4. Handle nested or unnested follow ups
+    let rawFollowUp = rawObject.suggestedFollowUp || rawRubric.suggestedFollowUp || rawObject.followUp || [];
+    if (Array.isArray(rawFollowUp)) {
+      standardizedResponse.suggestedFollowUp = rawFollowUp.map(item => {
+        if (typeof item === 'object' && item !== null) {
+          return item.question || Object.values(item)[0] || "";
+        }
+        return String(item);
+      });
+    }
+
+    res.json(standardizedResponse);
 
   } catch (error) {
     console.error("❌ Backend processing error:", error);
